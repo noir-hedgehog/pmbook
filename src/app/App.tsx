@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Share2,
   Download,
-  X,
   Github,
 } from "lucide-react";
 
@@ -249,11 +248,9 @@ async function createShareImage(question: string, answer: string) {
     }
   }
 
-  ctx.strokeStyle = "rgba(184, 149, 90, 0.28)";
+  ctx.strokeStyle = "rgba(184, 149, 90, 0.24)";
   ctx.lineWidth = 2;
-  ctx.strokeRect(72, 72, width - 144, height - 144);
-  ctx.strokeStyle = "rgba(184, 149, 90, 0.12)";
-  ctx.strokeRect(104, 104, width - 208, height - 208);
+  ctx.strokeRect(82, 82, width - 164, height - 164);
 
   ctx.textAlign = "center";
   ctx.fillStyle = "#b8955a";
@@ -303,29 +300,20 @@ async function createShareImage(question: string, answer: string) {
   });
   const qrImage = await loadImage(qrDataUrl);
 
+  const qrSize = 260;
+  const qrPadding = 10;
+  const qrBoxSize = qrSize + qrPadding * 2;
+  const qrX = (width - qrBoxSize) / 2;
+  const qrY = 1210;
+
   ctx.fillStyle = "rgba(240, 230, 207, 0.96)";
-  ctx.fillRect(130, 1240, 280, 280);
-  ctx.drawImage(qrImage, 140, 1250, 260, 260);
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = "#e2d5b8";
-  ctx.font = '34px "Noto Serif SC", "Songti SC", serif';
-  ctx.fillText("扫码翻开你的答案", 470, 1335);
-
-  ctx.fillStyle = "rgba(226, 213, 184, 0.52)";
-  ctx.font = '24px "DM Mono", "Courier New", monospace';
-  ctx.fillText(PROJECT_URL, 470, 1395);
-
-  ctx.strokeStyle = "rgba(184, 149, 90, 0.24)";
-  ctx.beginPath();
-  ctx.moveTo(470, 1438);
-  ctx.lineTo(980, 1438);
-  ctx.stroke();
+  ctx.fillRect(qrX, qrY, qrBoxSize, qrBoxSize);
+  ctx.drawImage(qrImage, qrX + qrPadding, qrY + qrPadding, qrSize, qrSize);
 
   ctx.textAlign = "center";
-  ctx.fillStyle = "rgba(184, 149, 90, 0.58)";
-  ctx.font = '22px "Noto Serif SC", "Songti SC", serif';
-  ctx.fillText("答案不负责解释，只负责出现", width / 2, 1515);
+  ctx.fillStyle = "#e2d5b8";
+  ctx.font = '34px "Noto Serif SC", "Songti SC", serif';
+  ctx.fillText("扫码翻开你的答案", width / 2, qrY + qrBoxSize + 68);
 
   return canvas.toDataURL("image/png");
 }
@@ -726,34 +714,19 @@ export default function App() {
               className="relative w-full max-w-sm border border-[#b8955a]/20 bg-[#0f0c08] p-3 shadow-2xl shadow-black/50"
               onClick={(event) => event.stopPropagation()}
             >
-              <button
-                onClick={() => setShareImage(null)}
-                aria-label="关闭分享图"
-                className="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center border border-[#b8955a]/25 bg-background text-[#b8955a]/70 transition-colors hover:text-[#b8955a]"
-              >
-                <X size={15} />
-              </button>
               <img
                 src={shareImage}
                 alt="产品之书分享图"
                 className="block w-full border border-[#b8955a]/10"
               />
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-3">
                 <button
                   onClick={downloadShareImage}
-                  className="flex flex-1 items-center justify-center gap-2 border border-[#b8955a]/30 px-4 py-3 text-[11px] tracking-[0.24em] font-mono text-[#b8955a] transition-colors hover:bg-[#b8955a]/8"
+                  className="flex w-full items-center justify-center gap-2 border border-[#b8955a]/30 px-4 py-3 text-[11px] tracking-[0.24em] font-mono text-[#b8955a] transition-colors hover:bg-[#b8955a]/8"
                 >
                   <Download size={12} />
                   下载图片
                 </button>
-                <a
-                  href={PROJECT_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-center border border-[#b8955a]/18 px-4 py-3 text-[11px] tracking-[0.24em] font-mono text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  打开
-                </a>
               </div>
             </motion.div>
           </motion.div>
@@ -761,10 +734,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer */}
-      <footer className="z-10 flex flex-col items-center gap-3 text-center">
-        <p className="text-muted-foreground/30 text-[10px] tracking-[0.35em] font-mono">
-          答案不负责解释，只负责出现
-        </p>
+      <footer className="z-10 flex flex-col items-center text-center">
         <a
           href="https://hits.sh/noir-hedgehog.github.io/pmbook/"
           target="_blank"
