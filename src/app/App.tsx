@@ -16,6 +16,8 @@ type Mode = "question" | "theme" | "random";
 
 const PROJECT_URL = "https://noir-hedgehog.github.io/pmbook/";
 const GITHUB_URL = "https://github.com/noir-hedgehog/pmbook";
+const BREAK_AFTER = new Set("，。！？；：、,.!?;:");
+const TRAILING_PAIRS = new Set("”’）】》」』)]}");
 
 const THEMES = [
   { id: "threshold", label: "优先级", glyph: "◇" },
@@ -176,6 +178,64 @@ function loadImage(src: string) {
   });
 }
 
+function splitByPunctuation(text: string) {
+  const segments: string[] = [];
+  let segment = "";
+
+  Array.from(text).forEach((char) => {
+    segment += char;
+
+    if (BREAK_AFTER.has(char)) {
+      segments.push(segment);
+      segment = "";
+      return;
+    }
+
+    if (segment && TRAILING_PAIRS.has(char) && segments.length > 0) {
+      segments[segments.length - 1] += char;
+      segment = "";
+    }
+  });
+
+  if (segment) segments.push(segment);
+
+  return segments.filter(Boolean);
+}
+
+function splitLongSegment(
+  ctx: CanvasRenderingContext2D,
+  segment: string,
+  maxWidth: number,
+) {
+  const chars = Array.from(segment);
+  const lines: string[] = [];
+  let line = "";
+
+  chars.forEach((char) => {
+    const next = line + char;
+    if (line && ctx.measureText(next).width > maxWidth) {
+      lines.push(line);
+      line = char;
+    } else {
+      line = next;
+    }
+  });
+
+  if (line) lines.push(line);
+
+  if (
+    lines.length > 1 &&
+    Array.from(lines[lines.length - 1]).length === 1 &&
+    Array.from(lines[lines.length - 2]).length > 1
+  ) {
+    const previous = Array.from(lines[lines.length - 2]);
+    lines[lines.length - 1] = `${previous.pop()}${lines[lines.length - 1]}`;
+    lines[lines.length - 2] = previous.join("");
+  }
+
+  return lines;
+}
+
 function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -187,11 +247,20 @@ function wrapText(
 
   paragraphs.forEach((paragraph) => {
     let line = "";
-    Array.from(paragraph).forEach((char) => {
-      const next = line + char;
-      if (ctx.measureText(next).width > maxWidth && line) {
+    splitByPunctuation(paragraph).forEach((segment) => {
+      if (ctx.measureText(segment).width > maxWidth) {
+        if (line) {
+          lines.push(line);
+          line = "";
+        }
+        lines.push(...splitLongSegment(ctx, segment, maxWidth));
+        return;
+      }
+
+      const next = line + segment;
+      if (line && ctx.measureText(next).width > maxWidth) {
         lines.push(line);
-        line = char;
+        line = segment;
       } else {
         line = next;
       }
@@ -208,6 +277,18 @@ function wrapText(
   }
   trimmed[trimmed.length - 1] = `${lastLine}…`;
   return trimmed;
+}
+
+function PunctuatedText({ text }: { text: string }) {
+  return (
+    <>
+      {splitByPunctuation(text).map((segment, index) => (
+        <span key={`${segment}-${index}`} className="inline-block">
+          {segment}
+        </span>
+      ))}
+    </>
+  );
 }
 
 function drawWrappedText(
@@ -261,7 +342,7 @@ async function createShareImage(question: string, answer: string) {
   ctx.font = '68px "Noto Serif SC", "Songti SC", serif';
   ctx.fillText("产品之书", width / 2, 270);
 
-  let y = 400;
+  let y = 440;
 
   if (question) {
     ctx.fillStyle = "rgba(184, 149, 90, 0.72)";
@@ -271,7 +352,7 @@ async function createShareImage(question: string, answer: string) {
 
     ctx.fillStyle = "rgba(226, 213, 184, 0.82)";
     ctx.font = '38px "Noto Serif SC", "Songti SC", serif';
-    y = drawWrappedText(ctx, question, width / 2, y, 880, 64, 4) + 70;
+    y = drawWrappedText(ctx, question, width / 2, y, 880, 64, 3) + 70;
 
     ctx.strokeStyle = "rgba(184, 149, 90, 0.2)";
     ctx.beginPath();
@@ -288,7 +369,7 @@ async function createShareImage(question: string, answer: string) {
 
   ctx.fillStyle = "#f0e6cf";
   ctx.font = '52px "Noto Serif SC", "Songti SC", serif';
-  drawWrappedText(ctx, answer, width / 2, y, 900, 86, 6);
+  drawWrappedText(ctx, answer, width / 2, y, 900, 86, 4);
 
   const qrDataUrl = await QRCode.toDataURL(PROJECT_URL, {
     width: 260,
@@ -304,7 +385,7 @@ async function createShareImage(question: string, answer: string) {
   const qrPadding = 10;
   const qrBoxSize = qrSize + qrPadding * 2;
   const qrX = (width - qrBoxSize) / 2;
-  const qrY = 1210;
+  const qrY = 1110;
 
   ctx.fillStyle = "rgba(240, 230, 207, 0.96)";
   ctx.fillRect(qrX, qrY, qrBoxSize, qrBoxSize);
@@ -615,7 +696,7 @@ export default function App() {
                 transition={{ delay: 0.2, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                 className="text-xl md:text-2xl font-light leading-[2.2] tracking-wider text-foreground px-4"
               >
-                {answer}
+                <PunctuatedText text={answer} />
               </motion.blockquote>
 
               {/* Bottom ornament */}
