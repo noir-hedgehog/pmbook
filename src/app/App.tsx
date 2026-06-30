@@ -1,8 +1,22 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Shuffle, Search, BookOpen, RotateCcw, ChevronRight } from "lucide-react";
+import QRCode from "qrcode";
+import {
+  Shuffle,
+  Search,
+  BookOpen,
+  RotateCcw,
+  ChevronRight,
+  Share2,
+  Download,
+  X,
+  Github,
+} from "lucide-react";
 
 type Mode = "question" | "theme" | "random";
+
+const PROJECT_URL = "https://noir-hedgehog.github.io/pmbook/";
+const GITHUB_URL = "https://github.com/noir-hedgehog/pmbook";
 
 const THEMES = [
   { id: "threshold", label: "优先级", glyph: "◇" },
@@ -154,18 +168,187 @@ function matchByKeyword(q: string): string {
   return pick(veiledPool);
 }
 
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines?: number,
+) {
+  const paragraphs = text.split(/\n+/).filter(Boolean);
+  const lines: string[] = [];
+
+  paragraphs.forEach((paragraph) => {
+    let line = "";
+    Array.from(paragraph).forEach((char) => {
+      const next = line + char;
+      if (ctx.measureText(next).width > maxWidth && line) {
+        lines.push(line);
+        line = char;
+      } else {
+        line = next;
+      }
+    });
+    if (line) lines.push(line);
+  });
+
+  if (!maxLines || lines.length <= maxLines) return lines;
+
+  const trimmed = lines.slice(0, maxLines);
+  let lastLine = trimmed[trimmed.length - 1];
+  while (lastLine.length > 0 && ctx.measureText(`${lastLine}…`).width > maxWidth) {
+    lastLine = Array.from(lastLine).slice(0, -1).join("");
+  }
+  trimmed[trimmed.length - 1] = `${lastLine}…`;
+  return trimmed;
+}
+
+function drawWrappedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines?: number,
+) {
+  const lines = wrapText(ctx, text, maxWidth, maxLines);
+  lines.forEach((line, index) => {
+    ctx.fillText(line, x, y + index * lineHeight);
+  });
+  return y + lines.length * lineHeight;
+}
+
+async function createShareImage(question: string, answer: string) {
+  const canvas = document.createElement("canvas");
+  const width = 1200;
+  const height = 1600;
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is not available");
+
+  ctx.fillStyle = "#0b0907";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "rgba(184, 149, 90, 0.08)";
+  for (let x = 60; x < width; x += 72) {
+    for (let y = 60; y < height; y += 72) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.strokeStyle = "rgba(184, 149, 90, 0.28)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(72, 72, width - 144, height - 144);
+  ctx.strokeStyle = "rgba(184, 149, 90, 0.12)";
+  ctx.strokeRect(104, 104, width - 208, height - 208);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#b8955a";
+  ctx.font = '24px "DM Mono", "Courier New", monospace';
+  ctx.fillText("BOOK OF PRODUCT OMENS", width / 2, 180);
+
+  ctx.fillStyle = "#e2d5b8";
+  ctx.font = '68px "Noto Serif SC", "Songti SC", serif';
+  ctx.fillText("产品之书", width / 2, 270);
+
+  let y = 400;
+
+  if (question) {
+    ctx.fillStyle = "rgba(184, 149, 90, 0.72)";
+    ctx.font = '24px "DM Mono", "Courier New", monospace';
+    ctx.fillText("问", width / 2, y);
+    y += 54;
+
+    ctx.fillStyle = "rgba(226, 213, 184, 0.82)";
+    ctx.font = '38px "Noto Serif SC", "Songti SC", serif';
+    y = drawWrappedText(ctx, question, width / 2, y, 880, 64, 4) + 70;
+
+    ctx.strokeStyle = "rgba(184, 149, 90, 0.2)";
+    ctx.beginPath();
+    ctx.moveTo(300, y);
+    ctx.lineTo(900, y);
+    ctx.stroke();
+    y += 96;
+  }
+
+  ctx.fillStyle = "rgba(184, 149, 90, 0.72)";
+  ctx.font = '24px "DM Mono", "Courier New", monospace';
+  ctx.fillText("书曰", width / 2, y);
+  y += 74;
+
+  ctx.fillStyle = "#f0e6cf";
+  ctx.font = '52px "Noto Serif SC", "Songti SC", serif';
+  drawWrappedText(ctx, answer, width / 2, y, 900, 86, 6);
+
+  const qrDataUrl = await QRCode.toDataURL(PROJECT_URL, {
+    width: 260,
+    margin: 1,
+    color: {
+      dark: "#0b0907",
+      light: "#f0e6cf",
+    },
+  });
+  const qrImage = await loadImage(qrDataUrl);
+
+  ctx.fillStyle = "rgba(240, 230, 207, 0.96)";
+  ctx.fillRect(130, 1240, 280, 280);
+  ctx.drawImage(qrImage, 140, 1250, 260, 260);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#e2d5b8";
+  ctx.font = '34px "Noto Serif SC", "Songti SC", serif';
+  ctx.fillText("扫码翻开你的答案", 470, 1335);
+
+  ctx.fillStyle = "rgba(226, 213, 184, 0.52)";
+  ctx.font = '24px "DM Mono", "Courier New", monospace';
+  ctx.fillText(PROJECT_URL, 470, 1395);
+
+  ctx.strokeStyle = "rgba(184, 149, 90, 0.24)";
+  ctx.beginPath();
+  ctx.moveTo(470, 1438);
+  ctx.lineTo(980, 1438);
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(184, 149, 90, 0.58)";
+  ctx.font = '22px "Noto Serif SC", "Songti SC", serif';
+  ctx.fillText("答案不负责解释，只负责出现", width / 2, 1515);
+
+  return canvas.toDataURL("image/png");
+}
+
 export default function App() {
   const [mode, setMode] = useState<Mode>("random");
   const [question, setQuestion] = useState("");
+  const [sourceQuestion, setSourceQuestion] = useState("");
   const [activeTheme, setActiveTheme] = useState<ThemeId | null>(null);
   const [answer, setAnswer] = useState<string | null>(null);
+  const [shareImage, setShareImage] = useState<string | null>(null);
+  const [shareError, setShareError] = useState("");
   const [revealKey, setRevealKey] = useState(0);
   const [pending, setPending] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
-  const reveal = useCallback((text: string) => {
+  const reveal = useCallback((text: string, askedQuestion = "") => {
     setPending(true);
+    setShareImage(null);
+    setShareError("");
     setTimeout(() => {
       setAnswer(text);
+      setSourceQuestion(askedQuestion.trim());
       setRevealKey((k) => k + 1);
       setPending(false);
     }, 500);
@@ -173,7 +356,7 @@ export default function App() {
 
   const handleQuestion = () => {
     if (!question.trim()) return;
-    reveal(matchByKeyword(question));
+    reveal(matchByKeyword(question), question);
   };
 
   const handleTheme = (id: ThemeId) => {
@@ -192,7 +375,35 @@ export default function App() {
   const reset = () => {
     setAnswer(null);
     setQuestion("");
+    setSourceQuestion("");
     setActiveTheme(null);
+    setShareImage(null);
+    setShareError("");
+  };
+
+  const handleShare = useCallback(async () => {
+    if (!answer) return;
+
+    setSharing(true);
+    setShareError("");
+
+    try {
+      const image = await createShareImage(sourceQuestion, answer);
+      setShareImage(image);
+    } catch {
+      setShareError("分享图生成失败，请稍后再试");
+    } finally {
+      setSharing(false);
+    }
+  }, [answer, sourceQuestion]);
+
+  const downloadShareImage = () => {
+    if (!shareImage) return;
+
+    const link = document.createElement("a");
+    link.href = shareImage;
+    link.download = "产品之书-答案.png";
+    link.click();
   };
 
   return (
@@ -208,6 +419,17 @@ export default function App() {
       />
       {/* Center vertical hairline */}
       <div className="fixed top-0 left-1/2 -translate-x-px w-px h-full bg-gradient-to-b from-transparent via-[#b8955a]/8 to-transparent pointer-events-none" />
+
+      <a
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noreferrer"
+        title="Star on GitHub"
+        className="fixed top-4 right-4 z-20 flex items-center gap-2 border border-[#b8955a]/20 bg-background/70 px-3 py-2 text-[10px] tracking-[0.22em] font-mono text-[#b8955a]/75 backdrop-blur-sm transition-colors hover:border-[#b8955a]/45 hover:text-[#b8955a]"
+      >
+        <Github size={13} />
+        STAR
+      </a>
 
       {/* Header */}
       <header className="text-center z-10">
@@ -445,7 +667,21 @@ export default function App() {
                   再翻一页
                   <ChevronRight size={11} />
                 </button>
+                <div className="w-px h-3 bg-[#b8955a]/20" />
+                <button
+                  onClick={handleShare}
+                  disabled={sharing}
+                  className="flex items-center gap-2 text-[#b8955a]/65 hover:text-[#b8955a] disabled:opacity-40 disabled:cursor-wait text-[11px] tracking-[0.25em] font-mono transition-colors"
+                >
+                  <Share2 size={11} />
+                  {sharing ? "生成中" : "分享"}
+                </button>
               </motion.div>
+              {shareError && (
+                <p className="mt-5 text-[11px] tracking-[0.2em] font-mono text-destructive">
+                  {shareError}
+                </p>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -472,11 +708,74 @@ export default function App() {
         </AnimatePresence>
       </main>
 
+      <AnimatePresence>
+        {shareImage && (
+          <motion.div
+            key="share-preview"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-30 flex items-center justify-center bg-background/82 px-4 py-8 backdrop-blur-md"
+            onClick={() => setShareImage(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.25 }}
+              className="relative w-full max-w-sm border border-[#b8955a]/20 bg-[#0f0c08] p-3 shadow-2xl shadow-black/50"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                onClick={() => setShareImage(null)}
+                aria-label="关闭分享图"
+                className="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center border border-[#b8955a]/25 bg-background text-[#b8955a]/70 transition-colors hover:text-[#b8955a]"
+              >
+                <X size={15} />
+              </button>
+              <img
+                src={shareImage}
+                alt="产品之书分享图"
+                className="block w-full border border-[#b8955a]/10"
+              />
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={downloadShareImage}
+                  className="flex flex-1 items-center justify-center gap-2 border border-[#b8955a]/30 px-4 py-3 text-[11px] tracking-[0.24em] font-mono text-[#b8955a] transition-colors hover:bg-[#b8955a]/8"
+                >
+                  <Download size={12} />
+                  下载图片
+                </button>
+                <a
+                  href={PROJECT_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center border border-[#b8955a]/18 px-4 py-3 text-[11px] tracking-[0.24em] font-mono text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  打开
+                </a>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Footer */}
-      <footer className="z-10 text-center">
+      <footer className="z-10 flex flex-col items-center gap-3 text-center">
         <p className="text-muted-foreground/30 text-[10px] tracking-[0.35em] font-mono">
           答案不负责解释，只负责出现
         </p>
+        <a
+          href="https://hits.sh/noir-hedgehog.github.io/pmbook/"
+          target="_blank"
+          rel="noreferrer"
+          className="opacity-50 transition-opacity hover:opacity-80"
+        >
+          <img
+            alt="Hits"
+            src="https://hits.sh/noir-hedgehog.github.io/pmbook.svg"
+          />
+        </a>
       </footer>
     </div>
   );
